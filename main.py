@@ -46,8 +46,6 @@ def get_db():
     finally:
         db.close()
 
-# Маршрут для получения пользователя по ID
-@app.get("/users/{user_id}", response_model=UserResponse)
 def read_user(user_id: int, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
