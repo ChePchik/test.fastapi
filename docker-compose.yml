@@ -1,0 +1,12 @@
+version: "3.1"
+
+services:
+  fastapi:
+    build: .
+    ports:
+      - "8000:8000"
+    networks:
+      - app-network
+
+networks:
+  app-network:
