@@ -1,0 +1,89 @@
+# Название нашего процесса
+name: Continuous Deployment - test
+
+# Тригер
+on:
+  push:
+    # указываем что при пуще в ветку main, будет запускаться
+    branches: ["docker"]
+
+# переменные окружения
+env:
+  # реестр образов GitHub Container Registry (GHCR).
+  REGISTRY: ghcr.io
+  # название образа, совпадающее с именем репозитория.
+  IMAGE_NAME: ${{ github.repository }}
+
+# задачи
+jobs:
+  # как нибудь называем
+  build-and-push-image:
+    runs-on: ubuntu-latest
+    permissions:
+      # read — доступ к содержимому репозитория.
+      contents: read
+      # write — право публиковать контейнеры в GHCR.
+      packages: write
+      # write — право подписывать контейнеры (не используется явно, но может быть для безопасности).
+      attestations: write
+
+    # шаги для задачи
+    steps:
+      # Клонирует код в CI/CD среду.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Авторизация в GitHub Container Registry (GHCR)
+      - name: Log in to the Container registry
+        # надеюсь с версией проблем не будет
+        uses: docker/login-action@v3.3.0
+        with:
+          # Логинится в GHCR под текущим пользователем.
+          # Использует GITHUB_TOKEN для аутентификации.
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Извлечение метаданных образа
+      # Генерирует теги и лейблы для Docker-образа.
+      # Записывает их в steps.meta.outputs.tags и steps.meta.outputs.labels.
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5.6.1
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+
+      # Сборка и загрузка Docker-образа
+      - name: Build and push Docker image
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          # Собирает Docker-образ из текущей директории (context: .).
+          # Пушит образ в GitHub Container Registry.
+          # Использует метаданные для тегов и лейблов.
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+#      дальше по желанию пушим на удалённый сервер, его у нас конечно же нет
+# - name: Install SSH client
+#   run: sudo apt-get update && sudo apt-get install -y openssh-client
+
+# - name: Deploy to VM
+#   env:
+#     SSH_HOST: ${{ vars.SSH_HOST }}
+#     SSH_USER: ${{ secrets.SSH_USER }}
+#     SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+#     IMAGE_TAG: ${{ steps.meta.outputs.tags }}
+#   run: |
+#     echo "${{ env.SERVER_SSH_KEY }}" > key.pem
+#     chmod 600 key.pem
+#     ssh -i key.pem -o StrictHostKeyChecking=no ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+#       docker login ${{ env.REGISTRY }} -u ${{ github.actor }} -p ${{ secrets.MY_PERSONAL_PAT }}
+#       docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+#       cd ~
+#       docker compose down frontend
+#       docker compose up -d frontend
+#     EOF
+# Clean up the private key.pem
+# rm key.pem
